@@ -16,8 +16,8 @@ kids-chatbot-team4/
 
 ### 사전 요구사항
 
-- Node.js (v14 이상)
-- npm 또는 yarn
+- Node.js (v20.19+ 이상)
+- npm
 - Python (백엔드용)
 
 ### 설치
@@ -51,7 +51,7 @@ pip install -r requirements.txt
 Frontend:
 ```bash
 cd frontend
-npm start
+npm run dev
 ```
 
 Backend:
