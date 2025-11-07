@@ -11,9 +11,9 @@ interface Props {
 
 const ChatWindow: React.FC<Props> = ({ messages, onPromptClick }) => {
   return (
-    <div className="flex flex-col gap-3 w-full h-[75vh] overflow-y-auto p-6 bg-white/70 rounded-2xl shadow-lg border border-green-100 backdrop-blur-sm">
+    <div className="w-full max-w-full flex flex-col gap-3 h-[65vh] overflow-y-auto p-6 bg-white/70 rounded-2xl shadow-lg border border-green-100 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
       {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-end">
+        <div className="flex-1 flex flex-col items-center justify-center px-4">
           <ExamplePrompts onPromptClick={onPromptClick} />
         </div>
       ) : (
