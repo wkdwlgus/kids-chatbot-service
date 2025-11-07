@@ -186,6 +186,34 @@ class RAGService:
                 unique_docs.append(doc)
         
         return unique_docs
+    
+    
+    def has_location_data(self, docs: List[Dict[str, Any]]) -> bool:
+        """검색 결과에 위치 정보가 있는지 확인"""
+        for doc in docs[:3]:  # 상위 3개만 확인
+            meta = doc.get('metadata', {})
+            if meta.get('latitude') and meta.get('longitude'):
+                return True
+        return False
+    
+    def get_location_summary(self, docs: List[Dict[str, Any]]) -> str:
+        """위치 기반 검색 결과 요약"""
+        if not docs:
+            return "검색 결과가 없습니다."
+        
+        locations = []
+        for doc in docs[:3]:
+            meta = doc.get('metadata', {})
+            name = meta.get('facility_name')
+            region = f"{meta.get('region_city', '')} {meta.get('region_gu', '')}".strip()
+            
+            if name:
+                locations.append(f"{name} ({region})" if region else name)
+        
+        if locations:
+            return f"다음 장소들을 추천해드려요: {', '.join(locations)}"
+        else:
+            return "관련 시설을 찾았습니다."
 
 
 # 싱글톤 인스턴스
