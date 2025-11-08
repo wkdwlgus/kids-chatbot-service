@@ -22,7 +22,11 @@ venv\Scripts\activate
 source venv/bin/activate
 
 # 의존성 설치
+# 1) 로컬 CPU 개발용
 pip install -r requirements.txt
+
+# 2) GPU 테스트/배포용 (Colab/RunPod 등)
+pip install -r requirements.txt -r requirements-gpu.txt
 
 # 서버 실행
 python app.py
