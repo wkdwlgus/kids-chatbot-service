@@ -210,7 +210,17 @@ class VectorClient:
             seed = int(hash_obj.hexdigest(), 16) % (2**32)
             
             np.random.seed(seed)
-            fake_embedding = np.random.normal(0, 1, 3584)
+            # 모델별 차원 자동 감지
+            model_name = self.settings.EMBEDDING_MODEL.lower()
+
+            if "minilm" in model_name:
+                dim = 384
+            elif "7b" in model_name or "gte-qwen" in model_name:
+                dim = 3584
+            else:
+                dim = 384
+
+            fake_embedding = np.random.normal(0, 1, dim)
             
             norm = np.linalg.norm(fake_embedding)
             if norm > 0:

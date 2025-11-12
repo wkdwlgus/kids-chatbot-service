@@ -14,9 +14,18 @@ class Settings(BaseSettings):
     WEATHER_API_KEY: Optional[str] = None
     
     # Models
-    EMBEDDING_MODEL: str = "Alibaba-NLP/gte-Qwen2-7B-instruct"
-    GENERATION_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
+    # EMBEDDING_MODEL: str = "Alibaba-NLP/gte-Qwen2-7B-instruct"
+    # GENERATION_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
+    # RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    
+    
+    # ⭐ T4 최적화: 경량 모델로 변경
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    GENERATION_MODEL: str = "Qwen/Qwen2.5-3B-Instruct"  # 7B → 3B
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    
+    # ⭐ 4bit 양자화 설정 추가
+    USE_4BIT_QUANTIZATION: bool = True
     
     # Vector DB - 로컬/클라우드 자동 감지
     # 로컬 ChromaDB (Docker Compose)
