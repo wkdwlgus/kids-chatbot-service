@@ -58,15 +58,16 @@ class VectorClient:
         logger.info("🔍 CPU 환境 감지됨 (Mock 임베딩 사용)")
         return False
     
+    # utils/vector_client.py
     def _connect(self):
-        """ChromaDB 연결 (로컬 서버 우선, fallback to Cloud)"""
+        """ChromaDB 연결 (로컬 서버 우선, 실패 시 인메모리 모드)"""
         try:
-            # 1. 로컬 ChromaDB 서버 시도 (Docker Compose)
+            # :one: 로컬 ChromaDB 서버 시도 (Docker Compose 등)
             chroma_host = os.getenv("CHROMA_HOST", "localhost")
             chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
-            
+
             if chroma_host != "localhost" or os.getenv("ENVIRONMENT") == "docker":
-                logger.info(f"🔗 로컬 ChromaDB 서버 연결 시도: {chroma_host}:{chroma_port}")
+                logger.info(f":link: 로컬 ChromaDB 서버 연결 시도: {chroma_host}:{chroma_port}")
                 
                 self.client = chromadb.HttpClient(
                     host=chroma_host,
@@ -78,44 +79,53 @@ class VectorClient:
                     self.collection = self.client.get_collection(
                         name=self.settings.CHROMA_COLLECTION_NAME
                     )
-                    logger.info(f"✅ 기존 컬렉션 로드: {self.collection.name}")
+                    logger.info(f":white_check_mark: 기존 컬렉션 로드: {self.collection.name}")
                 except Exception:
-                    logger.info(f"📦 새 컬렉션 생성: {self.settings.CHROMA_COLLECTION_NAME}")
+                    logger.info(f":package: 새 컬렉션 생성: {self.settings.CHROMA_COLLECTION_NAME}")
                     self.collection = self.client.create_collection(
                         name=self.settings.CHROMA_COLLECTION_NAME,
                         metadata={"description": "Kids activity facilities"}
                     )
                 
-                logger.info(f"✅ 로컬 ChromaDB 연결 성공: {self.collection.count()}개 문서")
+                logger.info(f":white_check_mark: 로컬 ChromaDB 연결 성공: {self.collection.count()}개 문서")
                 return
-            
+
         except Exception as e:
-            logger.warning(f"⚠️ 로컬 ChromaDB 연결 실패: {e}")
-        
-        # 2. ChromaDB Cloud 시도 (fallback)
+            logger.warning(f":warning: 로컬 ChromaDB 연결 실패: {e}")
+
+        # :two: Fallback: 인메모리 ChromaDB (코랩용)
+        try:
+            logger.info(":bulb: 로컬 서버 미사용 → 인메모리 모드로 전환합니다.")
+            self.client = chromadb.Client()  # 인메모리 모드
+            self.collection = self.client.get_or_create_collection(
+                name=self.settings.CHROMA_COLLECTION_NAME,
+                metadata={"description": "Kids activity facilities"}
+            )
+            logger.info(":white_check_mark: 인메모리 ChromaDB 연결 성공")
+            return
+        except Exception as e:
+            logger.error(f":x: 인메모리 모드 실패: {e}")
+
+        # :three: Cloud 모드 (선택)
         try:
             if self.settings.CHROMA_API_KEY and self.settings.CHROMA_TENANT:
-                logger.info("🔗 ChromaDB Cloud 연결 시도...")
-                
+                logger.info(":link: ChromaDB Cloud 연결 시도...")
                 self.client = chromadb.CloudClient(
                     api_key=self.settings.CHROMA_API_KEY,
                     tenant=self.settings.CHROMA_TENANT,
                     database=self.settings.CHROMA_DATABASE,
                 )
-                
                 self.collection = self.client.get_collection(
                     name=self.settings.CHROMA_COLLECTION_NAME
                 )
-                
-                logger.info(f"✅ ChromaDB Cloud 연결 성공: {self.collection.count()}개 문서")
+                logger.info(f":white_check_mark: ChromaDB Cloud 연결 성공: {self.collection.count()}개 문서")
                 return
-        
         except Exception as e:
-            logger.error(f"❌ ChromaDB Cloud 연결 실패: {e}")
-        
-        # 3. 모든 연결 실패 시 에러
-        raise ConnectionError("ChromaDB 연결 실패: 로컬 서버와 Cloud 모두 연결할 수 없습니다.")
-    
+            logger.error(f":x: ChromaDB Cloud 연결 실패: {e}")
+
+        # :four: 모든 연결 실패 시 예외
+        raise ConnectionError("ChromaDB 연결 실패: 로컬, 인메모리, Cloud 모두 실패했습니다.")
+
     def _load_embedding_model(self):
         """임베딩 모델 로드 (GPU 환경)"""
         try:
