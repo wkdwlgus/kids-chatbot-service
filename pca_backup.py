@@ -1,46 +1,51 @@
 import chromadb
+from chromadb.config import Settings as ChromaSettings
 import pandas as pd
 import numpy as np
-import os
 import sys
 from time import sleep
 
 # ============================================
-# 1️⃣ 기본 설정
+# 설정
 # ============================================
 CHROMA_HOST = "localhost"
 CHROMA_PORT = 8000
-COLLECTION_NAME = "kid_program_collection_pca"  # ✅ FastAPI 설정과 동일하게
+COLLECTION_NAME = "kid_program_collection_pca"
+
 CSV_PATH = "./rag_data_integrated_final.csv"
-EMB_PATH = "./embeddings_pca_512.npy"
+EMBEDDINGS_PATH = "./embeddings_pca_512-r.npy"  # ← 파일명 수정
 
 print("="*70)
-print("🌱 ChromaDB 컬렉션 복구 스크립트 (512차원 PCA)")
+print("🐳 ChromaDB 벡터 데이터 업로드")
 print("="*70)
-print(f"📁 CSV 파일: {CSV_PATH}")
-print(f"📦 임베딩 파일: {EMB_PATH}")
-print(f"📚 컬렉션 이름: {COLLECTION_NAME}")
-print(f"🔌 연결: {CHROMA_HOST}:{CHROMA_PORT}")
+print(f"📁 CSV: {CSV_PATH}")
+print(f"📦 임베딩: {EMBEDDINGS_PATH}")
+print(f"🔌 ChromaDB: {CHROMA_HOST}:{CHROMA_PORT}")
+print(f"📚 컬렉션: {COLLECTION_NAME}")
 print("="*70)
 
 # ============================================
-# 2️⃣ 파일 확인
+# 1. 파일 확인
 # ============================================
+import os
+
 if not os.path.exists(CSV_PATH):
-    sys.exit(f"❌ CSV 파일을 찾을 수 없습니다: {CSV_PATH}")
-if not os.path.exists(EMB_PATH):
-    sys.exit(f"❌ 임베딩 파일을 찾을 수 없습니다: {EMB_PATH}")
+    sys.exit(f"❌ CSV 파일이 없습니다: {CSV_PATH}")
+
+if not os.path.exists(EMBEDDINGS_PATH):
+    sys.exit(f"❌ 임베딩 파일이 없습니다: {EMBEDDINGS_PATH}")
+
+print("✅ 파일 확인 완료")
 
 # ============================================
-# 3️⃣ CSV 로드
+# 2. CSV 로드
 # ============================================
 print("\n📥 CSV 로드 중...")
 df = pd.read_csv(CSV_PATH)
-print(f"✅ {len(df)}개 행 로드 완료")
+df = df.fillna("")
+print(f"✅ {len(df)}개 행 로드")
 
-df = df.fillna("")  # NaN 방지
-
-# ✅ Age 컬럼 포함 (텍스트 기반)
+# 메타데이터 컬럼
 meta_cols = [
     "Name", "Category1", "Category2", "Category3",
     "Address", "CTPRVN_NM", "SIGNGU_NM",
@@ -48,104 +53,104 @@ meta_cols = [
     "Age", "age_min", "age_max"
 ]
 meta_cols = [col for col in meta_cols if col in df.columns]
-
-print(f"📋 사용될 메타데이터 컬럼: {meta_cols}")
+print(f"📋 메타데이터 컬럼: {meta_cols}")
 
 # ============================================
-# 4️⃣ 문서(text) 구성
+# 3. 문서 생성
 # ============================================
 def build_doc(row):
+    """시설 정보를 텍스트로 변환"""
     parts = []
-
-    # 시설명
+    
     if row.get("Name"):
         parts.append(f"시설명: {row['Name']}")
-
-    # 분류
+    
     cat1 = row.get("Category1", "")
     cat2 = row.get("Category2", "")
     cat3 = row.get("Category3", "")
     if cat1 or cat2 or cat3:
         parts.append(f"분류: {cat1} / {cat2} / {cat3}")
-
-    # 지역
+    
     sido = row.get("CTPRVN_NM", "")
     sigungu = row.get("SIGNGU_NM", "")
     if sido or sigungu:
         parts.append(f"지역: {sido} {sigungu}")
-
-    # 주소
+    
     if row.get("Address"):
         parts.append(f"주소: {row['Address']}")
-
-    # 운영시간
+    
     if row.get("Time"):
         parts.append(f"운영시간: {row['Time']}")
-
-    # 운영요일
+    
     if row.get("Day"):
         parts.append(f"운영요일: {row['Day']}")
-
-    # 비용
+    
     if row.get("Cost"):
         parts.append(f"이용요금: {row['Cost']}")
-
-    # 실내/실외
+    
     if row.get("in_out"):
         parts.append(f"시설 형태: {row['in_out']}")
-
-    # Age (텍스트 기반)
+    
     if row.get("Age"):
         parts.append(f"권장연령: {row['Age']}")
-
-    # 세부 연령 범위
+    
     age_min = row.get("age_min")
     age_max = row.get("age_max")
     if age_min or age_max:
         parts.append(f"연령범위: {age_min}~{age_max}세")
-    else:
-        parts.append("연령범위: 제한 없음")  # 👈 추천
-
-    # Note
+    
     if row.get("Note"):
         parts.append(f"추가정보: {row['Note']}")
-
+    
     return ". ".join([p for p in parts if p])
 
 print("\n📝 문서 생성 중...")
 documents = df.apply(build_doc, axis=1).tolist()
 metadatas = df[meta_cols].to_dict(orient="records")
 ids = [f"doc_{i}" for i in range(len(df))]
-print(f"✅ {len(documents)}개 문서 구성 완료")
+print(f"✅ {len(documents)}개 문서 구성")
 
 # ============================================
-# 5️⃣ 임베딩 로드
+# 4. 임베딩 로드
 # ============================================
 print("\n📥 임베딩 로드 중...")
-embs = np.load(EMB_PATH, allow_pickle=True)
-print(f"✅ 임베딩 shape: {embs.shape}")
+embeddings = np.load(EMBEDDINGS_PATH, allow_pickle=True)
+print(f"✅ 임베딩 shape: {embeddings.shape}")
 
-if len(embs) != len(df):
-    min_len = min(len(embs), len(df))
-    print(f"⚠️ CSV({len(df)})와 임베딩({len(embs)}) 개수 불일치 → {min_len}개로 조정")
-    documents, metadatas, ids, embs = documents[:min_len], metadatas[:min_len], ids[:min_len], embs[:min_len]
+# 개수 일치 확인
+if len(embeddings) != len(df):
+    min_len = min(len(embeddings), len(df))
+    print(f"⚠️  CSV({len(df)})와 임베딩({len(embeddings)}) 개수 불일치")
+    print(f"→ {min_len}개로 조정")
+    documents = documents[:min_len]
+    metadatas = metadatas[:min_len]
+    ids = ids[:min_len]
+    embeddings = embeddings[:min_len]
 
 # ============================================
-# 6️⃣ Chroma 연결
+# 5. ChromaDB 연결
 # ============================================
 print("\n🔌 ChromaDB 연결 중...")
-client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+client = chromadb.HttpClient(
+    host=CHROMA_HOST,
+    port=CHROMA_PORT,
+    settings=ChromaSettings(
+        anonymized_telemetry=False
+    )
+)
+
 try:
     client.heartbeat()
     print("✅ 연결 성공")
 except Exception as e:
-    sys.exit(f"❌ 연결 실패: {e}\n도커 컨테이너를 실행 중인지 확인하세요.")
+    sys.exit(f"❌ 연결 실패: {e}\n\n도커 컨테이너를 실행하세요:\ndocker run -d -p 8000:8000 chromadb/chroma")
 
 # ============================================
-# 7️⃣ 기존 컬렉션 삭제 & 재생성
+# 6. 기존 컬렉션 삭제 & 재생성
 # ============================================
-print("\n🗑️ 기존 컬렉션 확인 중...")
+print("\n🗑️  기존 컬렉션 확인...")
 collections = [c.name for c in client.list_collections()]
+
 if COLLECTION_NAME in collections:
     print(f"→ '{COLLECTION_NAME}' 삭제 중...")
     client.delete_collection(COLLECTION_NAME)
@@ -159,7 +164,7 @@ collection = client.create_collection(name=COLLECTION_NAME)
 print("✅ 생성 완료")
 
 # ============================================
-# 8️⃣ 데이터 삽입
+# 7. 데이터 삽입
 # ============================================
 BATCH_SIZE = 1000
 total = len(documents)
@@ -167,25 +172,33 @@ print(f"\n🚚 데이터 삽입 시작 (총 {total}개, 배치 {BATCH_SIZE})")
 
 for start in range(0, total, BATCH_SIZE):
     end = min(start + BATCH_SIZE, total)
+    
     collection.add(
         ids=ids[start:end],
         documents=documents[start:end],
         metadatas=metadatas[start:end],
-        embeddings=embs[start:end].tolist()
+        embeddings=embeddings[start:end].tolist()
     )
+    
     print(f"   → {end}/{total} 완료 ({(end/total)*100:.1f}%)")
 
-print("\n🎉 삽입 완료!")
-print(f"총 문서 수: {collection.count()}")
+print(f"\n✅ 삽입 완료! 총 {collection.count()}개")
 
 # ============================================
-# 9️⃣ 샘플 확인
+# 8. 샘플 확인
 # ============================================
 print("\n🔍 샘플 메타데이터 확인:")
 sample = collection.get(limit=3, include=["metadatas"])
-for i, meta in enumerate(sample["metadatas"]):
-    print(f"[{i+1}] {meta.get('Name','이름없음')} ({meta.get('CTPRVN_NM','')}, {meta.get('in_out','')}, 연령: {meta.get('Age','')})")
 
-print("\n✅ PCA(512차원) 컬렉션 복구 완료!")
-print(f"✅ 이름: {COLLECTION_NAME}")
+for i, meta in enumerate(sample["metadatas"]):
+    name = meta.get('Name', '이름없음')
+    region = meta.get('CTPRVN_NM', '')
+    in_out = meta.get('in_out', '')
+    age = meta.get('Age', '')
+    print(f"[{i+1}] {name} ({region}, {in_out}, 연령: {age})")
+
+print("\n" + "="*70)
+print("🎉 ChromaDB 업로드 완료!")
+print(f"✅ 컬렉션: {COLLECTION_NAME}")
+print(f"✅ 총 {collection.count()}개 문서")
 print("="*70)

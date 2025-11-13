@@ -6,6 +6,7 @@ from config import settings  # app/ 가 루트이므로
 def get_llm():
     """GPU 여부에 따라 LLM 반환"""
     if settings.USE_GPU:
+        print("🌟 GPU 사용 - HuggingFacePipeline 로컬 모델 로드")
         # QWEN 로컬 모델
         tokenizer = AutoTokenizer.from_pretrained(settings.QWEN_MODEL_PATH)
         model = AutoModelForCausalLM.from_pretrained(
@@ -22,6 +23,7 @@ def get_llm():
         )
         return HuggingFacePipeline(pipeline=pipe)
     else:
+        print("🌟 CPU 사용 - OpenAI Chat 모델 로드")
         # OpenAI API
         return ChatOpenAI(
             model="gpt-4o-mini",
