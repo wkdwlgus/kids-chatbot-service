@@ -13,10 +13,7 @@ class Settings(BaseSettings):
     # ChromaDB
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8000
-    CHROMA_COLLECTION: str = "kid_program_collection_pca"
-    
-    # PCA Model
-    PCA_MODEL_PATH: str = "./pca_model_512-r.joblib"
+    CHROMA_COLLECTION: str = "kid_program_collection"
     
     # GPU & LLM
     USE_GPU: bool = torch.cuda.is_available()

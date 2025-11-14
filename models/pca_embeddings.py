@@ -1,119 +1,63 @@
-from typing import List
-import joblib
-import numpy as np
-import torch
-from transformers import AutoTokenizer, AutoModel, BitsAndBytesConfig
+from langchain_openai import OpenAIEmbeddings
 from config import settings
+import logging
 
-class PCAEmbeddings:
+logger = logging.getLogger(__name__)
+
+class OpenAIEmbeddingWrapper:
+    """OpenAI text-embedding-3-large 모델을 사용하는 임베딩 래퍼"""
+    
     def __init__(self):
-        print("="*70)
-        print("🚀 PCA 임베딩 시스템 초기화")
-        print("="*70)
-        
-        # PCA 모델 로드
-        print(f"📥 PCA 모델 로딩: {settings.PCA_MODEL_PATH}")
-        self.pca = joblib.load(settings.PCA_MODEL_PATH)
-        print(f"✅ PCA 로드 완료! (입력: {self.pca.n_features_in_}, 출력: {self.pca.n_components_})")
-        
-        # 디바이스 확인
-        self.device = "cuda" if (settings.USE_GPU and torch.cuda.is_available()) else "cpu"
-        print(f"📱 Device: {self.device}")
-        
-        if self.device == "cpu":
-            print("⚠️  경고: CPU 모드입니다. GPU 사용을 권장합니다!")
-        
-        # Alibaba GTE 모델 로드
-        print(f"📥 임베딩 모델 로딩: {settings.EMBEDDING_MODEL}")
-        print(f"⚠️  7B 모델 로딩 중... 시간이 걸립니다")
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(settings.EMBEDDING_MODEL)
-        
-        # 4-bit quantization 설정 (GPU 8GB용)
-        if self.device == "cuda":
-            print("🔧 4-bit quantization 적용 (메모리 절약)")
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4"
+        """OpenAI Embeddings 초기화"""
+        try:
+            self.embeddings = OpenAIEmbeddings(
+                model="text-embedding-3-large",
+                openai_api_key=settings.OPENAI_API_KEY,
+                dimensions=3072  # text-embedding-3-large의 기본 차원
             )
+            logger.info("✅ OpenAI Embeddings 초기화 성공 (text-embedding-3-large)")
+        except Exception as e:
+            logger.error(f"❌ OpenAI Embeddings 초기화 실패: {e}")
+            raise
+    
+    def embed_query(self, text: str) -> list[float]:
+        """
+        쿼리 텍스트를 임베딩으로 변환
+        
+        Args:
+            text: 임베딩할 텍스트
             
-            self.model = AutoModel.from_pretrained(
-                settings.EMBEDDING_MODEL,
-                quantization_config=quantization_config,
-                device_map="auto",
-                trust_remote_code=True
-            )
-        else:
-            # CPU 모드
-            self.model = AutoModel.from_pretrained(
-                settings.EMBEDDING_MODEL,
-                torch_dtype=torch.float32,
-                trust_remote_code=True
-            )
-            self.model = self.model.to(self.device)
-        
-        self.model.eval()
-        print(f"✅ 모델 로드 완료!")
-        print("="*70)
-    
-    def _mean_pooling(self, model_output, attention_mask):
-        """Mean Pooling"""
-        token_embeddings = model_output.last_hidden_state
-        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-    
-    def _get_gte_embedding(self, text: str) -> np.ndarray:
-        """Alibaba GTE 임베딩 생성"""
-        inputs = self.tokenizer(
-            text,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=512
-        ).to(self.device)
-        
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            embeddings = self._mean_pooling(outputs, inputs['attention_mask'])
-        
-        embedding = embeddings.cpu().numpy()[0]
-        embedding = embedding / np.linalg.norm(embedding)
-        
-        return embedding
-    
-    def _adjust_dimension(self, embedding: np.ndarray) -> np.ndarray:
-        """차원 조정"""
-        target_dim = self.pca.n_features_in_
-        current_dim = len(embedding)
-        
-        if current_dim == target_dim:
+        Returns:
+            임베딩 벡터 (3072차원)
+        """
+        try:
+            embedding = self.embeddings.embed_query(text)
+            logger.info(f"✅ 쿼리 임베딩 생성 완료: {len(embedding)}차원")
             return embedding
-        elif current_dim > target_dim:
-            return embedding[:target_dim]
-        else:
-            return np.pad(embedding, (0, target_dim - current_dim), mode='constant')
+        except Exception as e:
+            logger.error(f"❌ 쿼리 임베딩 생성 실패: {e}")
+            raise
     
-    def embed_query(self, text: str) -> List[float]:
-        """단일 쿼리 임베딩"""
-        embedding = self._get_gte_embedding(text)
-        embedding = self._adjust_dimension(embedding)
-        pca_embedding = self.pca.transform([embedding])[0]
-        return pca_embedding.tolist()
-    
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """여러 문서 임베딩"""
-        embeddings = []
-        for i, text in enumerate(texts):
-            if (i + 1) % 100 == 0:
-                print(f"   임베딩 진행: {i+1}/{len(texts)}")
-            embedding = self._get_gte_embedding(text)
-            embeddings.append(embedding)
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """
+        여러 문서를 임베딩으로 변환
         
-        embeddings = np.array(embeddings)
-        adjusted_embeddings = np.array([self._adjust_dimension(emb) for emb in embeddings])
-        pca_embeddings = self.pca.transform(adjusted_embeddings)
-        return pca_embeddings.tolist()
+        Args:
+            texts: 임베딩할 텍스트 리스트
+            
+        Returns:
+            임베딩 벡터 리스트
+        """
+        try:
+            embeddings = self.embeddings.embed_documents(texts)
+            logger.info(f"✅ 문서 임베딩 생성 완료: {len(embeddings)}개, 각 {len(embeddings[0])}차원")
+            return embeddings
+        except Exception as e:
+            logger.error(f"❌ 문서 임베딩 생성 실패: {e}")
+            raise
 
-pca_embeddings = PCAEmbeddings()
+
+# 전역 인스턴스 생성 (기존 pca_embeddings와 호환성 유지)
+pca_embeddings = OpenAIEmbeddingWrapper()
+
+logger.info("OpenAI Embeddings 래퍼 로드 완료")
