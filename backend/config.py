@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     GENERATION_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
     EMBEDDING_MODEL: str = "Alibaba-NLP/gte-Qwen2-7B-instruct"
     # API Keys
-    OPENWEATHER_API_KEY: str = "72923a37d28c75e1c4c642947cfdab4b"
+    OPENWEATHER_API_KEY: str
     KAKAO_API_KEY: str
     OPENAI_API_KEY: str
     
